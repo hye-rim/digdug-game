@@ -7,7 +7,7 @@ const COLS = 14, ROWS = 15;
 const DX = [0, 1, 0, -1], DY = [-1, 0, 1, 0];
 const START_LIVES = 3;
 const PLAYER_SPEED = 4.2, PLAYER_START = { x: 7, y: 2 };
-const PUMP_REACH = 2.8, PUMP_SPEED = 16, PUMP_HOLD = 0.75, PUMP_EVERY = 0.2, POP_AT = 4, DEFLATE_EVERY = 0.7;
+const PUMP_REACH = 3.5, PUMP_SPEED = 16, PUMP_HOLD = 0.75, PUMP_EVERY = 0.2, POP_AT = 4, DEFLATE_EVERY = 0.7;
 const GHOST_SPEED = 0.62;                                  // 유령(눈) 모습일 때 속도 배율
 const FIRE_LEN = 3, FIRE_CHARGE = 0.55, FIRE_TIME = 0.7;
 const ROCK_WOBBLE = 0.6, ROCK_G = 14;
@@ -36,7 +36,9 @@ const emit = (st, e) => { st.events.push(e); };
 const layerOf = (row) => (row <= 4 ? 0 : row <= 8 ? 1 : row <= 11 ? 2 : 3);
 const vegFor = (round) => VEG[Math.min(VEG.length - 1, Math.floor((round - 1) / 2) >= 8 ? 8 : Math.floor((round - 1) / 2))];
 const enemyCounts = (round) => ({ pooka: Math.min(5, 3 + Math.floor((round - 1) / 4)), fygar: Math.min(4, 1 + Math.floor((round - 1) / 2)) });
-const speedMul = (round) => Math.min(1.35, 1 + 0.03 * (round - 1));
+// 유령으로 변하기까지 걸리는 시간: 첫 판은 길고, 판이 올라갈수록 짧아진다
+const ghostDelay = (st, k) => k * (Math.max(16, 38 - 2 * st.round) + st.rand() * 14);
+const speedMul = (round) => Math.min(1.55, 1 + 0.055 * (round - 1));
 
 // ---------- 판 ----------
 function makeRound(st, round) {
@@ -74,7 +76,7 @@ function makeRound(st, round) {
   emit(st, { t: 'round', round });
 }
 function newEnemy(st, kind, x, y) {
-  return { id: ++st.seq, kind, x, y, dir: -1, state: 'walk', ghostT: 0, ghostNext: 14 + st.rand() * 10, inflate: 0, held: false, deflateT: 0, charge: 0, fireT: 0, fireCd: 3 + st.rand() * 3, face: st.rand() < 0.5 ? 1 : -1, stuck: 0, alive: true, anim: 0, sx: x, sy: y };
+  return { id: ++st.seq, kind, x, y, dir: -1, state: 'walk', ghostT: 0, ghostNext: ghostDelay(st, 1), inflate: 0, held: false, deflateT: 0, charge: 0, fireT: 0, fireCd: 3 + st.rand() * 3, face: st.rand() < 0.5 ? 1 : -1, stuck: 0, alive: true, anim: 0, sx: x, sy: y };
 }
 
 function newGame(rand = Math.random) {
@@ -215,7 +217,7 @@ function sub(st, h, input) {
   st.distT -= h;
   if (st.distT <= 0) { st.dist = distField(st, pc, pr); st.distT = 0.25; }
   const left = st.enemies.filter((e) => e.alive).length;
-  const speedUp = 1 + 0.1 * (st.enemies0 - left);
+  const speedUp = 1 + 0.05 * (st.enemies0 - left);
   for (const e of st.enemies) if (e.alive) updateEnemy(st, e, h, speedUp, left);
   st.enemies = st.enemies.filter((e) => e.alive);
   updateFlames(st, h);
@@ -379,7 +381,7 @@ function spawnVeg(st) {
 
 // ---- 적 ----
 function enemySpeed(e, st, speedUp) {
-  const base = e.kind === 'fygar' ? 3.2 : 3.5;
+  const base = e.kind === 'fygar' ? 2.3 : 2.5;
   return base * speedMul(st.round) * speedUp;
 }
 function updateEnemy(st, e, h, speedUp, left) {
@@ -408,7 +410,7 @@ function updateEnemy(st, e, h, speedUp, left) {
     e.y = Math.max(0, Math.min(ROWS - 1, e.y)); e.x = Math.max(0, Math.min(COLS - 1, e.x));
     const [c, r] = nearCell(e);
     const inTunnel = isOpen(st, c, r) && Math.abs(e.x - c) < 0.15 && Math.abs(e.y - r) < 0.15;
-    if (e.ghostT > 1.2 && inTunnel) { e.state = 'walk'; e.x = c; e.y = r; e.dir = -1; e.ghostNext = 12 + st.rand() * 12; e.stuck = 0; e.ghostT = 0; }
+    if (e.ghostT > 1.2 && inTunnel) { e.state = 'walk'; e.x = c; e.y = r; e.dir = -1; e.ghostNext = ghostDelay(st, 0.8); e.stuck = 0; e.ghostT = 0; }
     else if (d < 0.4 && e.ghostT > 0.6) { e.state = 'walk'; e.x = Math.round(e.x); e.y = Math.round(e.y); e.dir = -1; st.dirt[Math.round(e.y)][Math.round(e.x)] = false; e.ghostT = 0; }
     if (e.state === 'ghost' && !p.alive) return;
     return;
@@ -418,7 +420,7 @@ function updateEnemy(st, e, h, speedUp, left) {
   const [pc, pr] = nearCell(p);
   const reach = st.dist && st.dist[Math.round(e.y) * COLS + Math.round(e.x)] >= 0;
   if (!reach) e.stuck += h; else e.stuck = 0;
-  if (e.stuck > Math.max(2.8, 5 - 0.25 * st.round) || e.ghostNext <= 0) { e.state = 'ghost'; e.ghostT = 0; e.ghostNext = 99; return; }
+  if (e.stuck > Math.max(3.5, 6 - 0.25 * st.round) || e.ghostNext <= 0) { e.state = 'ghost'; e.ghostT = 0; e.ghostNext = 99; return; }
   // 파이가(용)는 일직선으로 마주 보면 불을 뿜는다
   if (e.kind === 'fygar') {
     e.fireCd -= h;
@@ -468,6 +470,7 @@ function updateFlames(st, h) {
 }
 
 return {
+  __enemySpeed: enemySpeed, __ghostDelay: ghostDelay,
   COLS, ROWS, DX, DY, START_LIVES, PLAYER_SPEED, PLAYER_START, PUMP_REACH, POP_AT, LAYER_POINTS, CRUSH_POINTS, VEG, FIRE_LEN, POCKETS,
   rng, newGame, makeRound, step, layerOf, vegFor, enemyCounts, distField, isOpen, popEnemy, spawnVeg, newEnemy, finishRock, killPlayer,
 };

@@ -271,7 +271,18 @@ test('the remaining enemies get faster as their friends are popped', () => {
   const st = bare(); parked(st);
   hole(st, 0, 13, 4);
   const mk = (total) => { const s = bare(); parked(s); hole(s, 0, 13, 4); const e = addEnemy(s, 'pooka', 12, 4); e.ghostNext = 999; s.enemies0 = total; s.player.x = 0; s.player.y = 4; s.player.invuln = 99; hole(s, 0, 0, 4); const x0 = e.x; run(s, 0.5); return x0 - e.x; };
-  assert.ok(mk(6) > mk(2) * 1.3, 'faster with fewer left');
+  assert.ok(mk(6) > mk(2) * 1.1, 'faster with fewer left');
+});
+
+test('enemies are slower than the player and get harder every round', () => {
+  const sp = (round) => { const s = bare(); s.round = round; return L.__enemySpeed({ kind: 'pooka' }, s, 1); };
+  assert.ok(sp(1) < L.PLAYER_SPEED * 0.65, 'round 1 clearly slower than player');
+  for (let r = 2; r <= 12; r++) assert.ok(sp(r) >= sp(r - 1), 'not easier at round ' + r);
+  assert.ok(sp(10) > sp(1) * 1.4, 'round 10 much faster');
+  assert.ok(sp(30) < L.PLAYER_SPEED, 'never faster than the player');
+  const d = (round) => { const s = bare(); s.round = round; return L.__ghostDelay(s, 1); };
+  let a = 0, b = 0; for (let i = 0; i < 50; i++) { a += d(1); b += d(12); }
+  assert.ok(b < a, 'ghosts come sooner in later rounds');
 });
 
 test('extra life at 20000 points and game over after the last life', () => {
